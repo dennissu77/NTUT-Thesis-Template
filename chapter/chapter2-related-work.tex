@@ -33,4 +33,21 @@
     \label{fig: image}
 \end{figure*}
 
+% ===== 以下為轉換演示 =====
+
+\section{VMSH: Hypervisor-agnostic Guest Overlays for VMs}
+
+\subsection{System Architecture}
+
+As an independent host process, vmsh runs alongside the hypervisor on the same host machine. vmsh does not modify the hypervisor's source code, nor does it rely on any management API provided by the hypervisor. Instead, vmsh completes all operations externally through ptrace and the underlying KVM API. Figure~\ref{fig:vmsh-arch} presents the system architecture of vmsh (adapted from \cite{Thalheim2022} Figure 2), whose workflow can be divided into the following four steps:
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/vmsh-arch.png}
+    \caption{System architecture of vmsh. vmsh establishes devices in the guest through side-loading a kernel library. The block device supports the overlay root file system, and the console device handles the I/O of the spawned process. Numbers 1--4 correspond to the four-step workflow. (Adapted from \cite{Thalheim2022})}
+    \label{fig:vmsh-arch}
+\end{figure*}
+
+% ===== 演示結束 =====
+
 \end{ZhChapter}
