@@ -1,0 +1,62 @@
+\begin{ZhChapter}
+
+\chapter{Experiment and Result}
+
+\section{Functional Validation and Generality}
+
+\subsection{PCI Device Discovery and Initialization}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/dmesg-pci-discovery.png}
+    \caption{dmesg log of PCI device discovery and BAR assignment (QEMU)}
+    \label{fig:dmesg-pci-discovery}
+\end{figure*}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/dmesg-virtio-negotiation.png}
+    \caption{dmesg log of VirtIO negotiation completion (QEMU)}
+    \label{fig:dmesg-virtio-negotiation}
+\end{figure*}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/guest-vdb-query.png}
+    \caption{Guest userspace query of the vdb device}
+    \label{fig:guest-vdb-query}
+\end{figure*}
+
+\subsection{Block I/O and Filesystem Validation}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/block-io-test.png}
+    \caption{Block I/O read/write and data integrity test (QEMU)}
+    \label{fig:block-io-test}
+\end{figure*}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/ext4-mount-test.png}
+    \caption{ext4 filesystem mount test (QEMU)}
+    \label{fig:ext4-mount-test}
+\end{figure*}
+
+\subsection{Cloud Hypervisor Validation}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/ch-data-integrity.png}
+    \caption{Data integrity test (Cloud Hypervisor)}
+    \label{fig:ch-data-integrity}
+\end{figure*}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/ch-ext4-mount.png}
+    \caption{ext4 filesystem mount test (Cloud Hypervisor)}
+    \label{fig:ch-ext4-mount}
+\end{figure*}
+
+\end{ZhChapter}
