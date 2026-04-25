@@ -1,99 +1,64 @@
 \begin{ZhChapter}
 
-\chapter{緒論（大標）}
+\chapter{Introduction}
+\label{ch:introduction}
 
-\section{研究動機與背景（小標）}
+\section{Background}
+\label{sec:background}
 
-\begin{equation} 
-    \mbox{$x = \dfrac{-b\pm\sqrt{b^2-4ac}}{2a}$}
-\end{equation}
+Virtualization is a cornerstone of modern cloud computing. Cloud service providers consolidate multiple tenants onto a single physical host through virtual machines (VMs) to achieve resource sharing and isolation. Among the various virtualization solutions, KVM (Kernel-based Virtual Machine) in the Linux kernel leverages hardware-assisted virtualization to provide efficient full virtualization capabilities and has become the dominant virtualization API in the industry, widely adopted by major cloud providers.
 
-\subsection{研究背景(小小標)}
+As the demand for performance-sensitive workloads grows, the industry has seen a trend toward designing lightweight VMs. These approaches reduce the VM image size to lower memory footprint and accelerate startup time, making them suitable for rapid-deployment scenarios such as serverless computing, while also improving system reliability and security by reducing the attack surface. The key to achieving this lightweight design lies in minimizing the VM's root filesystem, which entails removing services that are not needed during normal operation, such as monitoring and debugging tools.
 
-\text 背景內文背景內文背景內文背景內文,背景內文背景內文背景內文背景內文背景內文背景內文，如表 1.1 所示。
+However, this lightweight strategy introduces a fundamental tension: when users need to debug, monitor, or attach additional services to a VM, these tools no longer exist in the VM image. Rebuilding the image is not only cumbersome but also requires restarting the VM, causing the loss of runtime state and diagnostic information. This trade-off between the advantages of lightweight VMs and the availability of functionality raises a central question: is it possible to dynamically extend the capabilities of a running VM without modifying its image?
 
-\begin{table*}[htbp]
-    \centering
-    \caption{表格範例標題} \label{tab: complexity}
-    \makebox[\linewidth][c]{
-    \renewcommand\arraystretch{1.2}{
-        \begin{tabular}{| l | c  c  c  c |}
-        \hline
-        Protocol & $P$ & $CS_1$ & $CS_2$ & $RG$ \\
-        \hline
-        SD & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(1)$, N/A & $O(n-t)$, $O(1)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        MSSMul & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        MSSAdd & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & N/A, N/A, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        SC & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        \hline 
-        \end {tabular}
-    }}
-\end {table*}
+To address this problem, Thalheim et al. proposed vmsh~\cite{Thalheim2022} at EuroSys 2022, a hypervisor-agnostic mechanism for extending VM functionality. The core idea of vmsh is to dynamically attach VirtIO devices to a running VM from the outside, without modifying the hypervisor's source code or altering the guest image. Specifically, vmsh traces the hypervisor process using Linux's ptrace mechanism and leverages the KVM interface to side-load code into the guest kernel, registering VirtIO block and console devices within the guest to provide capabilities such as filesystem mounting and interactive terminal access. At the device emulation level, vmsh employs VirtIO MMIO transport as the communication channel between host and guest, and uses KVM's irqfd mechanism for interrupt injection. This approach has been successfully validated on multiple mainstream KVM hypervisors, including QEMU, Firecracker, crosvm, and kvmtool, demonstrating its cross-hypervisor generality.
 
-\subsubsection{研究動機(小小標)}
+\section{Motivations}
+\label{sec:motivations}
 
-\begin{equation} 
-    \mbox{$(1+x)^n = 1 + \dfrac{nx}{1!} + \dfrac{n(n-1)x^2}{2!}$}
-\end{equation}
+Despite vmsh's demonstrated cross-hypervisor generality, a gap remains in its actual support coverage. Among the five KVM hypervisors it targets, Cloud Hypervisor, initiated by Intel, is the sole exception that remains incompatible. The authors of vmsh explicitly noted in their paper:
 
-動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。
+\begin{quote}
+\textit{VMSH is able to support 4 out of the 5 hypervisors. Cloud Hypervisor is the exception as it uses PCIe's MSI-X messages for its interrupt handling. Therefore, it is incompatible with MMIO as a VirtIO transport channel.}~\cite{Thalheim2022}
+\end{quote}
 
-動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機。動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機。動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，如圖 1.1、圖 1.2 所示。
+vmsh's existing dynamic device attachment is implemented using VirtIO MMIO transport, whose interrupt injection relies on the interrupt routing mechanism internal to the KVM kernel. However, Cloud Hypervisor adopts a different interrupt architecture, rendering the interrupt path that vmsh depends on inoperable and consequently making the entire MMIO transport approach unusable on the Cloud Hypervisor platform.
 
-\begin{figure*}[htbp]
-    \centering
-    \includegraphics[width = 1\textwidth]{image.jpeg}
-    \caption{Cool train station}
-    \label{fig: image}
-\end{figure*}
+To address this limitation, the authors of vmsh also outlined a research direction: ``We plan to extend VMSH to support VirtIO over PCI for Cloud Hypervisor.''~\cite{Thalheim2022} This implies that the virtual devices dynamically attached by vmsh would no longer be presented via MMIO transport but would instead appear as PCI devices within the guest OS, using MSI-X interrupt injection to replace the incompatible interrupt path and thereby resolving the compatibility issue with Cloud Hypervisor.
 
-\begin{figure*}[htbp]
-    \centering
-    \includegraphics[width = 1\textwidth]{image.jpeg}
-    \caption{"Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station" "Cool train station"}
-    \label{fig: image}
-\end{figure*}
+However, implementing VirtIO over PCI in a non-cooperative environment is fundamentally different from PCI device emulation performed internally by a hypervisor. In a typical virtualization architecture, PCI device emulation is handled within the hypervisor, which has full access to PCI bus topology information and can directly manage device registration, configuration space responses, and interrupt routing. By contrast, vmsh operates outside the hypervisor and cannot access these internal data structures and interfaces; it must achieve the same objectives through indirect means. Specifically, as an external process independent of the hypervisor, vmsh faces the following technical challenges: first, intercepting the guest's accesses to PCI configuration space to enable virtual device discovery and configuration; second, injecting MSI-X interrupts to replace the incompatible interrupt path; and third, implementing complete VirtIO-PCI device emulation, including the Capabilities structure, BAR mapping, and virtqueue management.
 
-\begin{figure*}[htbp]
-    \centering
-    \includegraphics[width = 1\textwidth]{image.jpeg}
-    \caption{Cool train station}
-    \label{fig: image}
-\end{figure*}
+In summary, the design of vmsh pursues two core objectives: non-cooperativeness, requiring no pre-deployed programs in the guest userspace, and generality, not relying on the internal interfaces of any specific hypervisor. As discussed above, vmsh's existing MMIO transport approach cannot support Cloud Hypervisor, while implementing PCI device emulation from outside the hypervisor involves several unresolved technical challenges. Therefore, how to implement VirtIO over PCI transport while maintaining vmsh's non-cooperative and hypervisor-agnostic design philosophy, thereby enabling vmsh to support Cloud Hypervisor, is the central research question that this study aims to address.
 
-\begin{table*}[htbp]
-    \centering
-    \caption{表格範例標題} \label{tab: complexity}
-    \makebox[\linewidth][c]{
-    \renewcommand\arraystretch{1.2}{
-        \begin{tabular}{| l | c  c  c  c |}
-        \hline
-        Protocol & $P$ & $CS_1$ & $CS_2$ & $RG$ \\
-        \hline
-        MSSMul & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        MSSAdd & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & N/A, N/A, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        SC & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        MSSMul & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        MSSAdd & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & N/A, N/A, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        SC & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        \hline 
-        \end {tabular}
-    }}
-\end {table*}
+\section{Research Contribution}
+\label{sec:contribution}
 
-動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。
+This study extends vmsh to address its incompatibility with Cloud Hypervisor by implementing VirtIO over PCI transport in a non-cooperative environment. The main contributions are as follows:
 
-動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。
+\begin{sloppypar}
+\textbf{Non-cooperative PCI device emulation.} As an external process independent of the hypervisor, vmsh must complete device emulation from the outside without hypervisor cooperation. This study extends vmsh's side-load library mechanism to trigger a PCI rescan within the guest OS and intercepts Port I/O instructions issued by the guest via ptrace, implementing PCI device discovery, configuration space emulation, BAR mapping, and VirtIO-PCI negotiation, enabling the guest to access the device emulated by vmsh through the standard virtio-pci driver.
+\end{sloppypar}
 
-動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。
+\begin{sloppypar}
+\textbf{Resolving interrupt mechanism compatibility and extending hypervisor support.} vmsh's existing interrupt injection mechanism relies on the Full IRQChip architecture and cannot operate under Cloud Hypervisor's Split IRQChip environment. This study adopts the KVM\_SIGNAL\_MSI interface provided by KVM to implement MSI-X interrupt injection, making the interrupt mechanism independent of IRQChip architecture differences.
+\end{sloppypar}
 
-動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。動機動機動機動機，動機動機動機動機動機動機動機動機動機動機動機動機，動機動機動機動機動機動機動機動機。
+\begin{sloppypar}
+\textbf{Cross-hypervisor validation of correctness and generality.} Functional validation is performed under both QEMU and Cloud Hypervisor environments to confirm the generality of PCI transport; additionally, correctness testing using xfstests is conducted under the QEMU environment to confirm the preliminary correctness of PCI transport.
+\end{sloppypar}
 
-\begin{figure*}[htbp]
-    \centering
-    \includegraphics[width = 0.5\textwidth]{image.jpeg}
-    \caption{Cool train station}
-    \label{fig: image}
-\end{figure*}
+\section{Thesis Organization}
+\label{sec:organization}
+
+\textbf{Chapter~\ref{ch:introduction} Introduction} presents the background and motivation of this study, describes the incompatibility between vmsh and Cloud Hypervisor, and states the contributions of this research.
+
+\textbf{Chapter~\ref{ch:literature} Literature Review} reviews the technical background relevant to this study, including the KVM virtualization architecture, the VirtIO device model, the PCI bus and MSI-X interrupt mechanism, and introduces the system architecture and design of vmsh.
+
+\textbf{Chapter~\ref{ch:method} Proposed Method} details the system design and implementation of this study, covering PCI device discovery, Port I/O interception, VirtIO-PCI device emulation, and MSI-X interrupt injection.
+
+\textbf{Chapter~\ref{ch:experiment} Experiment and Results} presents the validation results of this study, including functional validation under QEMU and Cloud Hypervisor, correctness testing with xfstests, and a discussion of the limitations of the prototype implementation.
+
+\textbf{Chapter~\ref{ch:conclusion} Conclusion and Future Work} summarizes the results and contributions of this study, and proposes future research directions including an asynchronous I/O model, performance testing, and integration with vmsh's broader functionality.
 
 \end{ZhChapter}

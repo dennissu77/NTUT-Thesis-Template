@@ -34,6 +34,18 @@
 
 \input{ntut-labels.tex}
 
+% 章節標題改為英文格式（Chapter 1, Chapter 2, ...）
+\renewcommand\prechaptername{Chapter }
+\renewcommand\postchaptername{}
+\renewcommand\tocprechaptername{Chapter }
+\renewcommand\tocpostchaptername{}
+\renewcommand\countermapping[1]{\thechapter}
+
+% 目錄、圖目錄、表目錄標題改為英文
+\renewcommand\contentsname{Table of Contents}
+\renewcommand\listfigurename{List of Figures}
+\renewcommand\listtablename{List of Tables}
+
 \begin{document}
 
 % 新增浮水印 Add Watermarks

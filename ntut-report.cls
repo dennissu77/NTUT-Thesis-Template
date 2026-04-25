@@ -549,12 +549,12 @@
 }
 \newenvironment{Thanks}
 {
-    \chapter*{誌謝}
+    \chapter*{Acknowledgements}
     \vspace{0.5cm}
     \
     \begin{spacing}{2}
     \phantomsection % for hyperref to register this
-    \addcontentsline{toc}{chapter}{誌謝}
+    \addcontentsline{toc}{chapter}{Acknowledgements}
 }
 {
     \end{spacing}
@@ -754,7 +754,7 @@
     \chapter*{\contentsname
         \@mkboth{%
            \MakeUppercase\contentsname}{\MakeUppercase\contentsname}}%
-    \addcontentsline{toc}{chapter}{目錄}
+    \addcontentsline{toc}{chapter}{Table of Contents}
     \@starttoc{toc}%
     \if@restonecol\twocolumn\fi
     }
@@ -803,7 +803,7 @@
       \@restonecolfalse
     \fi
     \chapter*{\listfigurename}%
-    \addcontentsline{toc}{chapter}{圖目錄}%
+    \addcontentsline{toc}{chapter}{List of Figures}%
       \@mkboth{\MakeUppercase\listfigurename}%
               {\MakeUppercase\listfigurename}%
     \@starttoc{lof}%
@@ -817,7 +817,7 @@
       \@restonecolfalse
     \fi
     \chapter*{\listtablename}%
-    \addcontentsline{toc}{chapter}{表目錄}%
+    \addcontentsline{toc}{chapter}{List of Tables}%
       \@mkboth{%
           \MakeUppercase\listtablename}%
          {\MakeUppercase\listtablename}%
