@@ -1,14 +1,17 @@
 % 英文摘要頁
 \begin{EnAbstract}
     \begin{EnAbstractItems}
-        % 關鍵詞，請自己填，多個關鍵字以逗號 "," 隔開
-        \noindent \text Keyword: (Fill it)
+        % Keywords
+        \noindent \text Keywords: Virtualization, Device Emulation, VirtIO, PCI Transport
 
     \end{EnAbstractItems}
 
     \begin{EnAbstractDescription}
-        Start writing abstract from here. Start writing abstract from here. Start writing abstract from here. Start writing abstract from here. Start writing abstract from here. Start writing abstract from here. Start writing abstract from here. Start writing abstract from here.
-    \end{EnAbstractDescription}
-    
-\end{EnAbstract}
+        Lightweight virtual machines reduce resource consumption and attack surface by minimizing their images, but at the cost of removing debugging and monitoring tools. vmsh addresses this problem with a non-cooperative approach that dynamically attaches VirtIO devices to running virtual machines without modifying the hypervisor or the guest OS, supplementing VMs with the required services and tools. However, vmsh is incompatible with Cloud Hypervisor due to differences in interrupt mechanisms, limiting the range of hypervisors that vmsh can support.
 
+        This study extends vmsh's functionality by implementing VirtIO over PCI transport while preserving its non-cooperative and hypervisor-agnostic properties. This study leverages the KVM\_SIGNAL\_MSI system call interface provided by KVM to inject MSI-X interrupts, resolving the interrupt mechanism incompatibility between vmsh and Cloud Hypervisor. For PCI device emulation, this study extends vmsh's side-load library mechanism to trigger PCI rescan within the guest OS, and intercepts Port I/O instructions issued by the guest via ptrace, enabling the guest OS to discover the PCI virtual device emulated by vmsh and perform I/O operations through the standard virtio-pci driver.
+
+        Furthermore, this study conducts functional verification under both QEMU and Cloud Hypervisor environments, and uses xfstests to confirm the preliminary correctness of the PCI transport implementation. As a result, vmsh successfully supports Cloud Hypervisor, expanding its hypervisor compatibility and demonstrating the feasibility of emulating PCI devices using a non-cooperative approach.
+    \end{EnAbstractDescription}
+
+\end{EnAbstract}

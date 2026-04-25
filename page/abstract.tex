@@ -1,14 +1,17 @@
 % 中文摘要頁
 \begin{ZhAbstract}
     \begin{ZhAbstractItems}
-        % 關鍵詞，請自己填，請自己填，多個關鍵字以逗號(、)隔開
-        \noindent \text 關鍵詞：（請自己填）
+        % 關鍵詞
+        \noindent \text 關鍵詞：虛擬化、設備模擬、VirtIO、PCI transport
 
     \end{ZhAbstractItems}
 
     \begin{ZhAbstractDescription}
-        摘要為論文或報告的精簡概要,其目的是透過簡短的敘述使讀者大致瞭解整篇報告的內容。摘要的內容通常須包括問題的描述以及所得到的結果,但以不超過 500 字或一頁為原則,且不得有參考文獻或引用圖表等。以中文撰寫之論文除中文摘要外，得於中文摘要後另附英文摘要。標題使用 20pt 粗標楷體並於上、下方各空一行（1.5 倍行高，字型 12pt 空行）後鍵入摘要內容。摘要頁須編頁碼（小寫羅馬數字表示頁碼）。
-    \end{ZhAbstractDescription}
-    
-\end{ZhAbstract}
+        輕量虛擬機器透過最小化映像檔來降低資源佔用與攻擊面，但同時移除了除錯與監控等工具。vmsh 針對此問題提出非合作式（non-cooperative）的解決方案，能在不修改虛擬機器監視器（hypervisor）與客體作業系統（Guest OS）的前提下，將 VirtIO 設備動態掛載至運行中的虛擬機器，為其補充所需的服務與工具。然而，vmsh 與 Cloud Hypervisor 在中斷機制上存在不相容，限制了 vmsh 的 hypervisor 支援範圍。
 
+        本研究擴充 vmsh 的功能，在維持非合作式與 hypervisor 無關（hypervisor-agnostic）的特性前提下，為 vmsh 實現了 VirtIO over PCI transport，並利用 KVM 所提供的 KVM\_SIGNAL\_MSI 介面實現 MSI-X 中斷的注入，來解決 vmsh 在中斷機制上與 Cloud Hypervisor 的不相容問題。在 PCI 設備模擬方面，本研究延伸 vmsh 的 side-load library 機制在客體作業系統內部觸發 PCI rescan，並透過 ptrace 攔截客體作業系統發出的 Port I/O 指令，使其得以發現由 vmsh 所模擬的 PCI 虛擬設備，進而透過標準 virtio-pci 驅動程式與該設備進行 I/O 操作。
+
+        此外，本研究在 QEMU 與 Cloud Hypervisor 兩種環境下完成功能驗證，並使用 xfstests 確認本研究中 PCI transport 實現的初步正確性，使 vmsh 成功支援 Cloud Hypervisor，擴展了 vmsh 的 hypervisor 支援範圍，並驗證了使用非合作式方法模擬 PCI 設備的可行性。
+    \end{ZhAbstractDescription}
+
+\end{ZhAbstract}
