@@ -1,76 +1,208 @@
 \begin{ZhChapter}
 
-\chapter{若標題太長，則可以分成兩行排列的形式撰寫}
+\chapter{Literature Review}
+\label{ch:literature}
 
-\section{名詞定義（小標）}
+\section{Virtualization and KVM}
+\label{sec:virtualization-kvm}
 
-定義定義定義定義定義定義\cite{latex2e}，定義定義定義定義，定義定義定義定義定義定義定義定義定義定義，定義定義。
+\subsection{Hardware-Assisted Virtualization}
+\label{sec:hw-virt}
 
-\begin{table*}[htbp]
-    \centering
-    \caption{表格範例標題} \label{tab: complexity}
-    \makebox[\linewidth][c]{
-    \renewcommand\arraystretch{1.2}{
-        \begin{tabular}{| l | c  c  c  c |}
-        \hline
-        Protocol & $P$ & $CS_1$ & $CS_2$ & $RG$ \\
-        \hline
-        MSSMul & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        SC & $O(1)$, $O(1)$, N/A & $O(n-t)$, $O(n)$, $O(1)$ & $O(n-t)$, $O(n)$, N/A & $O(1)$, $O(n)$, $O(n)$ \\
-        \hline 
-        \end {tabular}
-    }}
-\end {table*}
+Virtualization is a technology that enables multiple independent operating systems to run simultaneously on a single physical machine. By introducing a software layer called the hypervisor (or Virtual Machine Monitor, VMM) between the hardware and the guest OS, each guest OS is provided with a set of virtualized hardware resources (including CPU, memory, I/O devices, etc.) and operates in an isolated environment as if it has its own dedicated physical machine. This technology enables cloud service providers to consolidate workloads from multiple tenants onto a single physical host, achieving resource sharing and isolation.
 
-\section{模型說明（小標）}
+To improve virtualization performance, processor vendors introduced hardware-assisted virtualization technologies (such as Intel VT-x and AMD-V), which natively integrate dedicated virtualization execution modes into the CPU, allowing guest operating systems to run at near-native performance~\cite{IntelSDM}. When a guest executes certain sensitive operations, the processor automatically transfers control back to the hypervisor for handling; this event is called a VM-Exit. This hardware-level mechanism significantly improves virtualization performance and forms the foundation of modern virtualization architectures.
 
-說明說明說明說明，說明說明說明說明說明說明說明說明說明說明說明說明，說明說明說明說明說明說明說明說明。
+\subsection{Kernel-based Virtual Machine (KVM)}
+\label{sec:kvm}
 
-\begin{figure*}[htbp]
-    \centering
-    \includegraphics[width = 0.5\textwidth]{image.jpeg}
-    \caption{Cool train station}
-    \label{fig: image}
-\end{figure*}
+Kernel-based Virtual Machine (KVM) is a virtualization module built into the Linux kernel that leverages the aforementioned hardware-assisted virtualization capabilities to turn the Linux kernel itself into a hypervisor~\cite{Kivity2007}\cite{KVMAPI}. KVM provides virtualization infrastructure as a kernel module, including vCPU creation and scheduling, guest physical memory management, and VM-Exit event handling. Userspace programs interact with KVM through ioctl interfaces (such as KVM\_CREATE\_VM, KVM\_CREATE\_VCPU, KVM\_RUN, etc.) to create and control virtual machines~\cite{KVMAPI}.
 
-% ===== 以下為轉換演示 =====
+Under the KVM architecture, the actual responsibility of constructing a complete virtualization environment falls on the userspace hypervisor program. These hypervisors are responsible for setting up the initial state of the VM, emulating peripheral devices (such as disks, network interfaces, display adapters, etc.), and handling operations that the guest cannot perform directly on the hardware. Major KVM hypervisors currently include QEMU~\cite{QEMU}, Firecracker~\cite{Firecracker}, Cloud Hypervisor~\cite{CloudHypervisor}, crosvm, and kvmtool, each designed and optimized for different use cases.
+
+\subsection{VM-Exit Mechanism}
+\label{sec:vm-exit}
+
+The hypervisor drives guest execution by continuously repeating the following cycle: it calls the KVM\_RUN ioctl to begin guest execution; when the guest performs certain specific operations, the processor pauses guest execution and transfers control back to KVM, an event known as a VM-Exit. After handling some VM-Exit events within the kernel, KVM passes events that require userspace intervention to the hypervisor program for processing; the hypervisor then calls KVM\_RUN again, and the cycle repeats. In this architecture, each vCPU corresponds to a separate thread in the hypervisor process~\cite{KVMAPI}. The VM-Exit types relevant to this study include:
+
+\begin{itemize}
+    \item \textbf{KVM\_EXIT\_MMIO}: Triggered when the guest accesses an unmapped memory address, typically used for accessing MMIO device registers. Upon receiving this event, the hypervisor emulates the corresponding device behavior based on the accessed address and data.
+    \item \textbf{KVM\_EXIT\_IO}: Triggered when the guest executes IN/OUT instructions to access I/O ports, used for Port I/O type device accesses. For example, PCI configuration space accesses in the x86 architecture are performed through the 0xCF8/0xCFC I/O ports.
+\end{itemize}
+
+These two VM-Exit mechanisms form the foundation for device emulation by the hypervisor: each access by the guest to a virtual device triggers a VM-Exit, which is intercepted and responded to by the hypervisor, thereby emulating complete hardware device behavior without the guest's knowledge. In this study, vmsh leverages these VM-Exit events to intercept and handle guest device access requests from outside the hypervisor.
+
+\section{VirtIO Standard and PCI Transport}
+\label{sec:virtio-pci}
+
+\subsection{VirtIO Overview}
+\label{sec:virtio-overview}
+
+In traditional device emulation, the hypervisor reproduces the register interface of real hardware for the guest, and the guest uses the same drivers as in a physical environment to operate the devices. However, real hardware register interfaces are designed for physical environments; in a virtualized setting, each register access by the guest requires hypervisor intervention, and a single I/O operation often involves multiple register accesses, resulting in accumulated overhead that severely impacts performance~\cite{Russell2008}.
+
+Paravirtualized I/O takes a different approach: instead of operating devices through emulated hardware register interfaces, the guest uses drivers specifically designed for virtualized environments and exchanges data with the hypervisor directly through shared memory, significantly reducing the number of hypervisor interventions required~\cite{Russell2008}. However, different virtualization platforms implemented their own paravirtualized device interfaces, preventing drivers from being shared across platforms. VirtIO was proposed as a cross-platform common device interface standard to address this fragmentation~\cite{Russell2008}.
+
+VirtIO defines a unified interface specification for various virtual devices (such as block devices, network devices, etc.), enabling VirtIO drivers in the guest to interoperate with any standards-compliant hypervisor device implementation~\cite{VirtIO11}. Currently, all major KVM hypervisors implement VirtIO devices, and major operating systems provide corresponding VirtIO drivers, making VirtIO the de facto standard for virtualized device emulation.
+
+The core data exchange mechanism of VirtIO is the virtqueue. A virtqueue is a set of ring-shaped descriptor queues (descriptor rings) residing in shared memory between host and guest. The guest driver writes I/O requests into descriptors in the virtqueue and notifies the host-side device to process them; once the device completes processing, it writes results back to shared memory and notifies the guest via an interrupt. This shared-memory-based design avoids per-transaction VM-Exits, significantly improving I/O performance. Each VirtIO device may have one or more virtqueues depending on its type; for example, a block device typically uses a single request queue, while a network device uses separate receive and transmit queues.
+
+\subsection{Transport Mechanism}
+\label{sec:transport}
+
+In the VirtIO standard, the transport determines how the guest discovers devices and accesses device configuration interfaces. The VirtIO specification defines two primary transports: Virtio over PCI Bus and Virtio over MMIO~\cite{VirtIO11}.
+
+MMIO transport maps device configuration registers to a memory address range, and the guest operates the device through memory access instructions. This approach does not rely on hardware infrastructure such as the PCI bus, is structurally simple, and is particularly prevalent in minimalist virtualization environments such as microVMs. vmsh's original device emulation uses MMIO transport~\cite{Thalheim2022}.
+
+PCI transport presents VirtIO devices as devices on the PCI bus, utilizing the PCI standard's configuration space, BAR mapping, and Capability mechanisms to carry the VirtIO configuration interface. Since x86 platforms universally support the PCI bus, most KVM hypervisors targeting general-purpose scenarios (such as QEMU) support PCI transport. This study introduces this transport mechanism to vmsh.
+
+\subsection{PCI Transport}
+\label{sec:pci-transport}
+
+PCI transport presents VirtIO devices as devices on the PCI bus. The following first introduces the relevant fundamentals of the PCI bus, then explains how VirtIO utilizes these mechanisms to implement its transport.
+
+\noindent\textbf{PCI Configuration Space and Access Mechanism}
+
+Each device on the PCI bus has a 256-byte Configuration Space. The operating system reads and writes the configuration space to identify the device's identity and type, configure system resources required by the device, and query the extended features supported by the device~\cite{PCI30}. For example, the beginning of the configuration space stores the device's Vendor ID and Device ID, which the operating system uses to determine the device's manufacturer and model and load the corresponding driver.
+
+In the x86 architecture, PCI configuration space access is performed through a pair of I/O ports: the guest first writes the target device's bus number (Bus), device number (Device), function number (Function), and register offset to I/O port 0xCF8 (CONFIG\_ADDRESS), then reads or writes the corresponding configuration data through I/O port 0xCFC (CONFIG\_DATA)~\cite{PCI30}. In a KVM virtualization environment, guest accesses to these I/O ports trigger KVM\_EXIT\_IO, which is intercepted by the hypervisor to emulate the corresponding PCI device responses.
+
+\noindent\textbf{Base Address Register (BAR)}
+
+The configuration space contains up to six BARs (Base Address Registers), which declare the memory-mapped or I/O port resources required by the device. During device initialization, the operating system allocates address ranges for the device through BARs; the device's functional registers are then mapped within these ranges, and drivers subsequently access the device by operating on these ranges~\cite{PCI30}.
+
+\noindent\textbf{PCI Capability Structure}
+
+The PCI specification defines a Capability mechanism that allows devices to declare supported extended features within the configuration space. Capabilities are chained together as a linked list: the Capabilities Pointer (offset 0x34) in the configuration space points to the first Capability, and each Capability structure contains a next pointer pointing to the next one until the end of the list~\cite{PCI30}. This mechanism allows PCI devices to flexibly extend their feature definitions within the framework of the standard configuration space.
+
+\noindent\textbf{VirtIO-PCI Capability Mapping}
+
+VirtIO PCI transport utilizes the above Capability mechanism to define a set of VirtIO-specific Capability structures within the PCI configuration space. Each Capability describes the location of a configuration region, specifying the BAR number and the offset within the BAR, serving as an index for the guest driver to locate each configuration region~\cite{VirtIO11}. The VirtIO specification defines four primary configuration regions:
+
+\begin{itemize}
+    \item \textbf{Common Configuration}: The device's general configuration interface, including feature negotiation, device status machine, and virtqueue configuration. The guest driver completes the device initialization process through this region.
+    \item \textbf{Notification}: The guest driver writes to this region to notify the device to process new I/O requests.
+    \item \textbf{ISR Status}: The device's interrupt status register; the guest driver reads this region to confirm the interrupt source.
+    \item \textbf{Device-specific Configuration}: Configuration data specific to the device type, such as the storage capacity of a block device.
+\end{itemize}
+
+The actual data for these configuration regions resides in the memory range mapped by the BAR. After the guest driver obtains each region's address through the Capabilities, it can operate the device directly using memory access instructions.
+
+In summary, VirtIO PCI transport builds device discovery and configuration on the foundation of the PCI standard: the configuration space and Capabilities allow the guest to discover devices and obtain the locations of configuration regions, while BAR mapping provides the interface for drivers to operate the device. In a virtualization environment, guest accesses to the configuration space trigger KVM\_EXIT\_IO type VM-Exits via Port I/O, while accesses to BAR ranges trigger KVM\_EXIT\_MMIO type VM-Exits; the hypervisor implements complete PCI device emulation by handling these two types of events.
 
 \section{VMSH: Hypervisor-agnostic Guest Overlays for VMs}
+\label{sec:vmsh}
+
+vmsh is the system that this study extends. The following introduces its design goals and technical architecture.
+
+\subsection{Overview and Design Goals}
+\label{sec:vmsh-overview}
+
+In cloud environments, lightweight virtual machines (lightweight VMs) are widely adopted due to their compact image size and fast startup time. To achieve these advantages, lightweight VM images typically contain only the minimal kernel and userland required to run the target application, omitting auxiliary tools such as monitoring and debugging utilities. However, when users need to add extra tools or services to a VM during runtime, the traditional approach requires rebuilding and redeploying the VM image, which not only undermines the advantages of the lightweight design but also requires restarting the VM, causing the loss of existing runtime state.
+
+vmsh~\cite{Thalheim2022} is a hypervisor-agnostic abstraction layer that enables on-demand service attachment to running VMs. vmsh dynamically attaches additional applications to a VM through a file system image and uses container-based isolation to ensure that newly added services do not affect the existing applications within the VM. Users can interact with the newly attached services through the console interface provided by vmsh, without modifying the VM image or restarting the VM.
+
+vmsh pursues three design goals~\cite{Thalheim2022}:
+
+\begin{itemize}
+    \item \textbf{Non-cooperativeness}: vmsh does not rely on pre-installed agents or management programs in the guest userspace. Even when no cooperative software exists in the guest, vmsh can complete service attachment from the outside.
+    \item \textbf{Generality}: vmsh does not depend on the API of any specific hypervisor but instead operates through the underlying KVM interface, enabling support for multiple KVM-based hypervisors. Additionally, vmsh supports a wide range of Linux kernel versions, without being constrained by specific kernel APIs.
+    \item \textbf{Performance}: vmsh's attachment process should not degrade the performance of existing applications in the guest. The performance of attached tools and services is a secondary concern but must remain usable.
+\end{itemize}
+
+vmsh currently supports four KVM-based hypervisors: QEMU, Firecracker, crosvm, and kvmtool, and is compatible with multiple Linux LTS kernel versions~\cite{Thalheim2022}.
 
 \subsection{System Architecture}
+\label{sec:vmsh-arch}
 
-As an independent host process, vmsh runs alongside the hypervisor on the same host machine. vmsh does not modify the hypervisor's source code, nor does it rely on any management API provided by the hypervisor. Instead, vmsh completes all operations externally through ptrace and the underlying KVM API. Figure~\ref{fig:vmsh-arch} presents the system architecture of vmsh (adapted from \cite{Thalheim2022} Figure 2), whose workflow can be divided into the following four steps:
+As an independent host process, vmsh runs alongside the hypervisor on the same host machine. vmsh does not modify the hypervisor's source code, nor does it rely on any management API provided by the hypervisor. Instead, vmsh completes all operations externally through ptrace and the underlying KVM API. Figure~\ref{fig:vmsh-arch} presents the system architecture of vmsh (adapted from \cite{Thalheim2022} Figure 2), whose workflow can be divided into the following four steps, corresponding to steps 1--4 as labeled in the figure:
 
 \begin{figure*}[htbp]
     \centering
     \includegraphics[width=0.8\textwidth]{figures/vmsh-arch.png}
-    \caption{System architecture of vmsh. vmsh establishes devices in the guest through side-loading a kernel library. The block device supports the overlay root file system, and the console device handles the I/O of the spawned process. Numbers 1--4 correspond to the four-step workflow. (Adapted from \cite{Thalheim2022})}
+    \caption{vmsh System Architecture (Adapted from \cite{Thalheim2022})}
     \label{fig:vmsh-arch}
 \end{figure*}
 
-All experiments in this study were conducted on the same physical host machine, whose hardware and operating system specifications are listed in Table~\ref{tab:host-spec}.
+In step (1) Attach, vmsh creates VirtIO block and console devices on the host side and attaches them to the target hypervisor process. The block device provides the file system image, and the console device handles input and output between the user and the VM.
 
-\begin{table*}[htbp]
-    \centering
-    \caption{Host machine specifications}
-    \label{tab:host-spec}
-    \renewcommand\arraystretch{1.5}{
-        \begin{tabular}{| l | l |}
-        \hline
-        Item & Specification \\
-        \hline
-        CPU & Intel Core i7-11700 @ 2.50GHz (8 cores, 16 threads) \\
-        \hline
-        Memory & 48 GB DDR4 \\
-        \hline
-        Storage & ADATA SX8200PNP 480GB NVMe SSD \\
-        \hline
-        OS & Ubuntu 22.04 LTS (kernel 5.15.0) \\
-        \hline
-        \end{tabular}
-    }
-\end{table*}
+In step (2) Side-load, vmsh loads a kernel library (called Stage1) into the guest kernel, enabling the guest to drive the virtual devices provided by vmsh. This step is accomplished by directly operating the KVM API, without requiring any pre-installed cooperative software in the guest.
 
-% ===== 演示結束 =====
+In step (3) Setup, Stage1 activates the corresponding VirtIO drivers within the guest kernel, mounts the file system provided by the block device, and establishes a container-based isolation environment (guest overlay). The userspace program in this phase is called Stage2.
+
+In step (4) Spawn, vmsh launches the user-specified program (e.g., a shell) within the container environment. The program's input and output are routed back to the host through the console device, allowing the user to interact with the newly attached services in the VM.
+
+\subsection{Design and Key Techniques}
+\label{sec:vmsh-techniques}
+
+Each phase of the above four-step workflow faces different technical challenges. The following introduces four core designs of vmsh, describing the challenges faced and the solutions adopted in each.
+
+\noindent\textbf{Hypervisor-agnostic Side-loading}
+
+In step (2), vmsh needs to load a kernel library into the guest kernel. However, the side-loading interfaces provided by different KVM-based hypervisors are inconsistent, and some hypervisors (such as Firecracker and kvmtool) do not provide such interfaces at all, making it impossible to load code in a unified manner.
+
+vmsh's approach is to bypass the hypervisor's management interface entirely, tracing the hypervisor process via ptrace and directly operating the underlying KVM API. Specifically, vmsh locates the KVM file descriptor held by the hypervisor process through the Linux /proc filesystem, uses the KVM API to read the guest page table to understand the guest's memory layout, allocates available space in the high-address region of guest physical memory, loads the Stage1 kernel library into that region, and finally modifies the vCPU's instruction pointer to cause the guest to begin executing the loaded code~\cite{Thalheim2022}.
+
+\noindent\textbf{Kernel-agnostic Library}
+
+The kernel library loaded in step (2) must be able to operate on different versions of the guest kernel. However, the internal APIs and data structures of the Linux kernel are not stable interfaces and may differ between versions, making it challenging to build a kernel library that works across versions.
+
+vmsh addresses this challenge with two strategies. First, Stage1 is designed as a shared ELF, which dynamically locates required kernel function addresses at runtime through binary analysis. Specifically, vmsh traverses the guest page table to locate the actual loading position of the kernel, handling the randomization caused by KASLR, then parses the ksymtab data structure within the kernel to obtain the addresses of all exported functions, which are used to fix up function references in Stage1. Second, Stage1 offloads as much functionality as possible to existing drivers within the guest kernel (such as VirtIO drivers), minimizing the use of kernel interfaces and reducing direct dependencies on internal kernel APIs.
+
+\noindent\textbf{Hypervisor-independent VirtIO Devices}
+
+The VirtIO devices created in step (1) run within the vmsh process rather than inside the hypervisor. Typical hypervisors (such as QEMU and Firecracker) implement device emulation within their own process and can directly access the device management interfaces provided by KVM. However, vmsh's devices reside outside the hypervisor process and cannot use the hypervisor's built-in device emulation framework, necessitating solutions to two problems: (1) how to intercept VMEXITs triggered by guest accesses to MMIO addresses, and (2) how to exchange data between host and guest through virtqueues located in guest virtual memory~\cite{Thalheim2022}.
+
+vmsh implements two types of VirtIO devices: a block device for providing the file system image, and a console device for redirecting application input and output. These devices are registered in the guest by the side-loaded kernel library (Stage1).
+
+For MMIO interception, when the guest driver accesses the MMIO registers of a VirtIO device, the access triggers a VMEXIT because the corresponding address is not mapped to physical memory. vmsh intercepts the hypervisor's KVM\_RUN ioctl via ptrace, intervenes when a VMEXIT occurs, and reads the memory-mapped vCPU file descriptor to parse and process the MMIO request. Additionally, vmsh supports ioregionfd as an alternative interception method, using file descriptor notifications instead of ptrace interception to reduce context switch overhead.
+
+For interrupt notification, vmsh uses KVM's irqfd mechanism to send interrupts after device processing is complete, notifying the guest driver to retrieve the results.
+
+vmsh's VirtIO devices are implemented using libraries from the rust-vmm project, with the backend extended to support cross-process memory access. The complete I/O flow is as follows: (1) the guest driver writes I/O requests to the driver virtqueue and writes to an MMIO register to notify vmsh, triggering a VMEXIT; (2) vmsh intercepts this VMEXIT, retrieves the request from the driver virtqueue, processes it, and writes the result to the vmsh virtqueue; (3) vmsh sends an interrupt via irqfd, notifying the guest driver to retrieve the result.
+
+\noindent\textbf{Container-based System Overlay}
+
+In step (3), vmsh needs to mount the file system provided by the block device into the guest. However, the mounted file system may conflict with the guest's existing root filesystem in terms of paths, for example, both may contain configuration files under /etc.
+
+vmsh uses mount namespace isolation through Stage2 in the guest userspace. The file system provided by the block device is mounted as an overlay, serving as the root filesystem of the container environment, while the guest's original mount points are moved under the /var/lib/vmsh directory, ensuring mutual isolation.
+
+This study extends the above vmsh architecture by implementing VirtIO-PCI transport for vmsh and replacing the irqfd interrupt mechanism with KVM\_SIGNAL\_MSI, enabling vmsh to support Cloud Hypervisor, which adopts the Split IRQChip architecture.
+
+\section{Interrupt Mechanisms in Virtualization}
+\label{sec:interrupt}
+
+\subsection{KVM Interrupt Delivery Mechanism}
+\label{sec:kvm-interrupt}
+
+In a virtualization environment, KVM is responsible for delivering interrupts to the guest's vCPUs. The core component of interrupt delivery is the LAPIC (Local Advanced Programmable Interrupt Controller); KVM emulates one LAPIC for each vCPU, which receives interrupt signals and notifies the corresponding vCPU for handling~\cite{KVMAPI}.
+
+Traditional pin-based interrupts are delivered through the IOAPIC (I/O Advanced Programmable Interrupt Controller). The IOAPIC receives interrupts from external devices and, based on its internal Redirection Table, determines the target vCPU and interrupt vector, then forwards the interrupt to the corresponding LAPIC.
+
+KVM manages interrupt routing through the GSI routing table. The GSI routing table maps each GSI (Global System Interrupt) number to a specific interrupt delivery method, such as forwarding to a specific IOAPIC pin or directly delivering as an MSI message to the LAPIC.
+
+KVM provides two IRQChip modes, which determine how interrupt controllers are managed~\cite{KVMAPI}:
+
+\begin{itemize}
+    \item \textbf{Full IRQChip}: Both IOAPIC and LAPIC are managed within the KVM kernel. The entire interrupt path from GSI routing through IOAPIC to LAPIC is completed within the kernel.
+    \item \textbf{Split IRQChip}: The KVM kernel manages only the LAPIC and does not create an IOAPIC within the kernel. The IOAPIC may be implemented by the userspace hypervisor.
+\end{itemize}
+
+KVM also provides the irqfd mechanism, which allows external programs to trigger interrupt injection through an eventfd. When the eventfd is written to, KVM looks up the GSI number bound to that irqfd and consults the GSI routing table to deliver the interrupt to the corresponding target.
+
+\subsection{MSI/MSI-X Interrupts}
+\label{sec:msi-x}
+
+Traditional pin-based interrupts are limited by the number of interrupt lines available on the IOAPIC, and all interrupts must be forwarded through the IOAPIC, which can become a bottleneck in multi-device environments. The PCI specification introduced MSI (Message Signaled Interrupts) and its extended version MSI-X to replace physical interrupt lines with a message-based approach~\cite{PCI30}.
+
+MSI/MSI-X interrupts bypass the IOAPIC; instead, the device directly writes an MSI message to the target LAPIC. Each MSI message consists of two fields: the address specifies the target LAPIC's address, and the data contains the interrupt vector and delivery mode information.
+
+MSI-X offers greater flexibility compared to MSI: each device can have up to 2048 independent interrupt vectors, each with its own address and data settings. These settings are stored in the MSI-X Table, which resides in the memory range mapped by the device's BAR and is configured by the driver during initialization.
+
+In a KVM virtualization environment, MSI interrupts can be delivered through two methods~\cite{KVMAPI}:
+
+\begin{itemize}
+    \item \textbf{GSI routing}: The hypervisor creates a KVM\_IRQ\_ROUTING\_MSI type entry in the GSI routing table, mapping a specific GSI number to the MSI message's address and data. When used with irqfd, triggering the eventfd causes KVM to write the MSI message to the LAPIC based on that entry.
+    \item \textbf{KVM\_SIGNAL\_MSI}: Directly writes the MSI message to the LAPIC via ioctl, bypassing the GSI routing table. This method does not depend on the IRQChip mode configuration and works under both Full IRQChip and Split IRQChip.
+\end{itemize}
 
 \end{ZhChapter}
