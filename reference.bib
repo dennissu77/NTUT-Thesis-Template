@@ -48,7 +48,7 @@
 
 @manual{IntelSDM,
   author = {{Intel Corporation}},
-  title = {Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3: System Programming Guide},
+  title = {Intel 64 and {IA-32} Architectures Software Developer's Manual, Volume 3: System Programming Guide},
   year = {2026},
   url = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html}
 }
@@ -64,7 +64,8 @@
 
 @misc{KVMAPI,
   author = {{The Linux Kernel Community}},
-  title = {The Definitive {KVM} (Kernel-based Virtual Machine) {API} Documentation},
+  title = {The Definitive {KVM} ({Kernel-based Virtual Machine}) {API} Documentation},
+  note = {The Linux Kernel Documentation},
   year = {2026},
   url = {https://docs.kernel.org/virt/kvm/api.html}
 }
@@ -89,18 +90,19 @@
 
 @misc{CloudHypervisor,
   author = {{Cloud Hypervisor Contributors}},
-  title = {Cloud Hypervisor},
+  title = {{Cloud Hypervisor}},
   year = {2026},
   url = {https://www.cloudhypervisor.org/}
 }
 
 @article{Russell2008,
-  title = {virtio: Towards a De-Facto Standard for Virtual {I/O} Devices},
+  title = {{virtio}: Towards a De-Facto Standard for Virtual {I/O} Devices},
   author = {Rusty Russell},
   journal = {ACM SIGOPS Operating Systems Review},
   volume = {42},
   number = {5},
   pages = {95--103},
+  month = jul,
   year = {2008},
   doi = {10.1145/1400097.1400108}
 }
@@ -109,6 +111,8 @@
   author = {Michael S. Tsirkin and Cornelia Huck},
   title = {Virtual {I/O} Device ({VIRTIO}) Version 1.1},
   organization = {OASIS},
+  note = {OASIS Committee Specification 01},
+  month = apr,
   year = {2019},
   url = {https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html}
 }
@@ -116,22 +120,24 @@
 @manual{PCI30,
   author = {{PCI-SIG}},
   title = {{PCI} Local Bus Specification, Revision 3.0},
+  month = feb,
   year = {2004}
 }
 
 @inproceedings{Thalheim2022,
-  title={vmsh: Hypervisor-agnostic Guest Overlays for VMs},
+  title={{vmsh}: Hypervisor-agnostic Guest Overlays for {VMs}},
   author={J{\"o}rg Thalheim and Peter Okelmann and Harshavardhan Unnibhavi and Redha Gouicem and Pramod Bhatotia},
   booktitle={Proceedings of the Seventeenth European Conference on Computer Systems (EuroSys '22)},
-  pages={678--693},
+  pages={678--696},
   year={2022},
   publisher={ACM},
-  address={Rennes, France}
+  address={Rennes, France},
+  doi={10.1145/3492321.3519589}
 }
 
 @misc{Xfstests,
-  author = {{The Linux Filesystem Community}},
-  title = {xfstests: Filesystem Testing Suite},
+  author = {{Kernel maintainers}},
+  title = {{xfstests-dev}},
   year = {2026},
   url = {https://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git}
 }
