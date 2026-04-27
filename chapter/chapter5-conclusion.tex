@@ -1,0 +1,32 @@
+\begin{ZhChapter}
+
+\chapter{Conclusion and Future Work}
+\label{ch:conclusion}
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This study extends the functionality of vmsh by implementing VirtIO over PCI transport while maintaining the non-cooperative and hypervisor-agnostic design philosophy, enabling vmsh to successfully support Cloud Hypervisor. The main contributions are as follows:
+
+\begin{enumerate}
+    \item \textbf{PCI device emulation in a non-cooperative environment.} As an external process independent of the hypervisor, vmsh must complete device emulation from the outside without hypervisor cooperation. This study extends vmsh's side-load library mechanism to trigger PCI rescan in the guest, and intercepts Port I/O instructions issued by the guest (KVM\_EXIT\_IO) via ptrace, responding to the guest's accesses to the virtual device's PCI Configuration Space so that the guest can discover the PCI virtual device emulated by vmsh during the rescan process. On this basis, a complete VirtIO-PCI device emulation is implemented, including PCI Configuration Space, BAR mapping, and virtqueue configuration, enabling the guest's virtio-pci driver to complete initialization and perform block I/O.
+
+    \item \textbf{Resolving interrupt mechanism compatibility issues to expand vmsh's hypervisor support.} vmsh's existing interrupt injection mechanism (irqfd) relies on the Full IRQChip architecture, limiting vmsh to operate only under hypervisors that adopt this architecture (e.g., QEMU). This study adopts KVM\_SIGNAL\_MSI to implement MSI-X interrupt injection, which does not depend on a specific IRQChip architecture, enabling vmsh to also support hypervisors that adopt Split IRQChip (e.g., Cloud Hypervisor).
+
+    \item \textbf{Cross-hypervisor validation confirming correctness and generality.} This study performs validation in both QEMU (Full IRQChip) and Cloud Hypervisor (Split IRQChip) environments. Functional validation covers PCI device discovery, initialization, interrupt path establishment, and block I/O, all of which pass in both environments. Additionally, correctness testing with xfstests shows that this study's PCI transport prototype implementation, under a 1 vCPU configuration, fails on the same test cases as vmsh's existing MMIO transport, providing preliminary reference data for the correctness of the PCI transport mechanism.
+\end{enumerate}
+
+\section{Future Work}
+\label{sec:future-work}
+
+This study validated the feasibility of non-cooperative PCI transport using a synchronous I/O model. Future development can proceed in the following directions:
+
+\begin{enumerate}
+    \item \begin{sloppypar}\textbf{Asynchronous I/O model.} This study's prototype implementation adopts a synchronous I/O model where each I/O operation blocks the vCPU thread, limiting operation to a 1 vCPU configuration only. Future work can refer to the asynchronous architecture of vmsh's existing MMIO implementation, receiving guest I/O requests via ioeventfd, processing them asynchronously on a dedicated thread, and injecting interrupts via KVM\_SIGNAL\_MSI upon completion, enabling the PCI transport to achieve xfstests validation results comparable to vmsh's existing implementation in a multi-vCPU environment.\end{sloppypar}
+
+    \item \textbf{Performance testing.} After completing the asynchronous I/O model, performance testing can be conducted following the methodology used in the original vmsh paper, comparing against vmsh's existing MMIO transport and QEMU's native virtio-blk device to evaluate the performance of PCI transport.
+
+    \item \textbf{Integration with vmsh's existing features.} This study has validated the feasibility of attaching a block device via PCI transport. vmsh's complete workflow includes, in addition to the block device, a Stage2 environment for establishing isolated containers inside the guest and a console interface for interactive terminal access. Future work can integrate PCI transport with these features, enabling vmsh to provide the same complete functionality on Cloud Hypervisor as the existing MMIO transport.
+\end{enumerate}
+
+\end{ZhChapter}
