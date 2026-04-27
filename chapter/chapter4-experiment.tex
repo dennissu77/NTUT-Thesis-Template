@@ -1,62 +1,269 @@
 \begin{ZhChapter}
 
 \chapter{Experiment and Result}
+\label{ch:experiment}
+
+\section{Experiment Design and Setup}
+\label{sec:exp-setup}
+
+This study proposes a non-cooperative PCI device emulation scheme, encompassing mechanisms such as PCI device discovery, Port I/O interception, VirtIO-PCI device emulation, and MSI-X interrupt injection. This chapter verifies through experiments whether this prototype implementation can operate correctly. Referencing the evaluation framework of the vmsh paper, this study conducts validation from the following three aspects:
+
+\begin{enumerate}
+    \item \textbf{Functional validation (Section~\ref{sec:func-validation})}: Verifies whether the mechanisms proposed in Chapter~\ref{ch:method} can be integrated end-to-end and operate correctly, including PCI device discovery, the initialization process, and I/O read/write operations.
+
+    \item \textbf{Generality (Section~\ref{sec:func-validation})}: Performs identical validation under both QEMU (Full IRQChip) and Cloud Hypervisor (Split IRQChip) environments, confirming that PCI transport can operate under different IRQChip architectures. In particular, as Cloud Hypervisor is a hypervisor that was not supported in the vmsh paper, this validates whether this study's implementation successfully resolves the incompatibility issue.
+
+    \item \textbf{Correctness (Section~\ref{sec:robust-validation})}: Uses the xfstests test suite~\cite{Xfstests} employed in the vmsh paper. xfstests is a widely adopted testing tool in the filesystem community for verifying the correctness and integrity of filesystems and block devices at the system call level, covering various edge cases. This study runs xfstests under a 1 vCPU configuration, using vmsh's existing MMIO transport as a comparison baseline, to confirm that the PCI transport implemented with a synchronous I/O model in this study does not introduce new correctness issues.
+\end{enumerate}
+
+Since this study's PCI transport adopts a synchronous I/O model as a prototype implementation, 1 vCPU is used as the primary test configuration, focusing the validation on the correctness of PCI transport itself. Section~\ref{sec:limitations} further discusses the limitations of this synchronous design and explains the differences from vmsh's existing I/O model.
+
+This study uses two sets of experimental environments for validation. Functional validation (Section~\ref{sec:func-validation}) is performed using a lightweight NixOS microvm image with manual operations, executed on both QEMU and Cloud Hypervisor; robustness validation (Section~\ref{sec:robust-validation}) uses a NixOS image containing xfstests tools and SSH access, executed in an automated manner on QEMU. The detailed configurations of both VM environments are described in their respective sections.
+
+All experiments in this study are conducted on the same physical host machine, whose hardware and operating system specifications are shown in Table~\ref{tab:host-spec}.
+
+\begin{table*}[htbp]
+    \centering
+    \caption{Host Machine Specifications}
+    \label{tab:host-spec}
+    \renewcommand\arraystretch{1.5}{
+        \begin{tabular}{| l | l |}
+        \hline
+        Item & Specification \\
+        \hline
+        CPU & Intel Core i7-11700 @ 2.50GHz (8 cores, 16 threads) \\
+        \hline
+        Memory & 48 GB DDR4 \\
+        \hline
+        Disk & ADATA SX8200PNP 480GB NVMe SSD \\
+        \hline
+        OS & Ubuntu 22.04 LTS (kernel 5.15.0) \\
+        \hline
+        \end{tabular}
+    }
+\end{table*}
 
 \section{Functional Validation and Generality}
+\label{sec:func-validation}
+
+\begin{table*}[htbp]
+    \centering
+    \caption{Functional Validation Environment Configuration}
+    \label{tab:func-test-env}
+    \renewcommand\arraystretch{1.5}{
+        \begin{tabular}{| l | l | l |}
+        \hline
+        Item & QEMU & Cloud Hypervisor \\
+        \hline
+        Version & 8.0.2 & v44.0.0 \\
+        \hline
+        IRQChip & Full & Split \\
+        \hline
+        vCPU & 1 & 1 \\
+        \hline
+        Memory & 512 MB & 512 MB \\
+        \hline
+        Guest kernel & Linux 6.3.6 & Linux 6.3.6 \\
+        \hline
+        Guest image & NixOS microvm & NixOS microvm \\
+        \hline
+        Backing file & 64 MB sparse file & 64 MB sparse file \\
+        \hline
+        \end{tabular}
+    }
+\end{table*}
+
+This section validates whether the mechanisms proposed in Chapter~\ref{ch:method} can be integrated end-to-end and operate correctly, covering PCI device discovery, the initialization process, and I/O read/write operations. Table~\ref{tab:func-test-env} lists the configurations of the two validation environments. The following subsections use the QEMU environment as the primary demonstration target; the Cloud Hypervisor validation results are presented in Section~\ref{sec:ch-validation} in comparison with QEMU to examine the generality of this study's implementation.
 
 \subsection{PCI Device Discovery and Initialization}
+\label{sec:pci-discovery}
+
+\noindent\textbf{PCI Configuration Space Interception and Device Identification}
+
+As described in Section~\ref{sec:port-io}, vmsh originally possessed the fundamental ability to intercept VM-Exits by reading the hypervisor's kvm\_run structure via ptrace; this study extends the handling logic for Port I/O type VM-Exits on top of this, enabling vmsh to identify and intervene in the guest's accesses to PCI Configuration Space. Additionally, as described in Section~\ref{sec:pci-rescan}, this study also modifies Stage1 so that after being injected into the guest, it proactively triggers a PCI bus rescan, causing the guest kernel to issue Port I/O reads to PCI Configuration Space.
+
+The following examines the operation of these two extensions through experimental results: first, whether the modified Stage1 can successfully trigger the guest to rescan the PCI bus, and second, whether the Port I/O generated during the scanning process is indeed intercepted and handled by vmsh.
+
+Figure~\ref{fig:port-io-sequence} excerpts the Port I/O sequence captured by vmsh on the host side in the QEMU environment, divided into three blocks according to the guest kernel's scanning progress. Block (1) shows the kernel issuing consecutive Config Space reads to slots 00:01.2 through 00:09.0 after Stage1 injection; the targets of these accesses are not the virtual device emulated by this study, and vmsh passes them through to the hypervisor after interception. Block (2) shows the situation when scanning reaches 00:0a.0, where vmsh marks this Port I/O with [VIRTUAL], indicating that this access corresponds to the PCI virtual device emulated by vmsh, and responds with VendorID 0x1AF4 and DeviceID 0x1042. Block (3) shows the guest kernel, after confirming that a valid device exists at this slot, proceeding to read other registers in the configuration space, first obtaining the HeaderType to confirm the device type, then entering the capability chain traversal, reading each capability's offset to collect the information needed for subsequent initialization.
+\newpage
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/port-io-sequence.png}
+    \caption{Port I/O Sequence Captured by vmsh During PCI Bus Scanning}
+    \label{fig:port-io-sequence}
+\end{figure*}
+
+The Port I/O sequence presented in the figure confirms that the Stage1 extended by this study successfully triggered the guest's PCI bus rescan, and that all Port I/O generated during the scanning process was correctly intercepted by vmsh, validating vmsh's ability to intercept and handle guest Port I/O after the extensions made by this study.
+
+\noindent\textbf{BAR Allocation and MMIO Region Establishment}
+
+Having validated the functionality of the PCI Configuration Space interception mechanism extended for vmsh in this study, the guest kernel successfully completes device identification and proceeds with the initialization process. In the next step, the kernel allocates an MMIO address range for the device according to the PCI standard and writes it to the BAR (Base Address Register), establishing the mapping from guest physical addresses to device registers. For a VirtIO-PCI device, this address range serves as the entry point for subsequent accesses to capabilities such as Common Config, Notify, ISR, and Device Config; after BAR allocation is complete, the guest can communicate with the device through MMIO instructions, and the related accesses are handled by vmsh's native MMIO interception mechanism.
+
+Figure~\ref{fig:dmesg-pci-discovery} shows the complete dmesg log of the guest kernel's interaction with the virtual device during the PCI bus rescan process. First, the kernel detects a device at 0000:00:0a.0, identifies its VendorID as 0x1af4 and DeviceID as 0x1042, confirming it as a VirtIO block device. Subsequently, the kernel performs the sizing procedure for each BAR to determine the memory range size required; after sizing is complete, the kernel sequentially allocates actual MMIO address ranges for BAR 0 (Common Config), BAR 2 (Notify/ISR), and BAR 4 (MSI-X Table), with BAR 0 assigned to [mem 0x20000000-0x20000fff]. Finally, the kernel changes the Command register from 0x0000 to 0x0002, indicating that the Memory Space Enable bit has been set, allowing the guest to access these BAR regions through MMIO instructions.
 
 \begin{figure*}[htbp]
     \centering
     \includegraphics[width=1.0\textwidth]{figures/dmesg-pci-discovery.png}
-    \caption{dmesg log of PCI device discovery and BAR assignment (QEMU)}
+    \caption{Guest Kernel dmesg Log for Virtual PCI Device (Excerpted from QEMU Environment)}
     \label{fig:dmesg-pci-discovery}
 \end{figure*}
+
+\noindent\textbf{VirtIO-PCI Negotiation Completion}
+
+After the BAR allocation and MMIO access channel establishment described above, the guest's MMIO accesses to the BAR regions immediately enter the VirtIO negotiation phase. In this phase, the driver sequentially writes the four status bits ACKNOWLEDGE, DRIVER, FEATURES\_OK, and DRIVER\_OK to the device\_status field of Common Config, negotiating features with the device through reading and writing feature bits, and reading device-specific information such as block capacity from the Device Config region. The progression of these four status bits constitutes the complete VirtIO negotiation process; at each stage, the driver reads back device\_status to confirm the device has accepted and retained the status before proceeding to the next stage. When the driver writes DRIVER\_OK, it indicates that the driver has completed all initialization preparations and accepts the device emulated by vmsh; the negotiation concludes and the device officially enters the operational state.
+
+After device\_status progresses to DRIVER\_OK, the guest kernel's virtio\_blk driver successfully identifies the device, with the dmesg log shown in Figure~\ref{fig:dmesg-virtio-negotiation}.
 
 \begin{figure*}[htbp]
     \centering
     \includegraphics[width=1.0\textwidth]{figures/dmesg-virtio-negotiation.png}
-    \caption{dmesg log of VirtIO negotiation completion (QEMU)}
+    \caption{virtio\_blk Driver dmesg Log After VirtIO Negotiation Completion (QEMU Environment)}
     \label{fig:dmesg-virtio-negotiation}
 \end{figure*}
+
+This message shows that the kernel has created a block device named vdb and read a capacity of 131072 sectors (i.e., 64 MiB), consistent with the number of sectors reported by vmsh. This result can also be verified from userspace, as shown in Figure~\ref{fig:guest-vdb-query}: \texttt{/dev/vdb} exists, and \texttt{cat /sys/block/vdb/size} returns 131072, allowing subsequent access through standard tools such as \texttt{dd} and \texttt{mount}.
 
 \begin{figure*}[htbp]
     \centering
     \includegraphics[width=1.0\textwidth]{figures/guest-vdb-query.png}
-    \caption{Guest userspace query of the vdb device}
+    \caption{Guest Userspace Query Results for the vdb Device}
     \label{fig:guest-vdb-query}
 \end{figure*}
 
-\subsection{Block I/O and Filesystem Validation}
+\subsection{MSI-X Interrupt Path Establishment}
+\label{sec:msix-path}
+
+The MSI-X interrupt mechanism relies on two key parameters: \textbf{Message Address} and \textbf{Message Data}. The former specifies the destination address to write to when triggering an interrupt, and the latter contains the corresponding interrupt vector number.
+
+These parameters are written by the guest's VirtIO driver to the virtual device's MSI-X Table during the initialization phase, where the vector corresponding to virtqueue 0 serves as the interrupt source for subsequent block I/O operations. The MSI-X Table is located in the BAR4 region of the virtual device and has been incorporated into vmsh's MMIO interception scope as part of this study's extensions; therefore, the driver's writes to the Table are captured and parsed by vmsh, ultimately yielding the configuration shown in Table~\ref{tab:msix-config}.
+\newpage
+
+\begin{table*}[htbp]
+    \centering
+    \caption{MSI-X Configuration Intercepted by vmsh from the Guest (QEMU Environment)}
+    \label{tab:msix-config}
+    \renewcommand\arraystretch{1.5}{
+        \begin{tabular}{| l | l | l | l |}
+        \hline
+        Vector & Purpose & Message Address & Message Data \\
+        \hline
+        1 & virtqueue 0 I/O completion notification & 0x00000000\_FEE00000 & 0x0000002E \\
+        \hline
+        \end{tabular}
+    }
+\end{table*}
+
+The configuration shown in the table indicates that vmsh has obtained the complete parameters required for the KVM\_SIGNAL\_MSI ioctl from the interaction with the guest during the initialization phase. In subsequent I/O processing, each time an I/O operation completes, vmsh can directly use this (Address, Data) pair as ioctl parameters to initiate interrupt injection, delivering the completion notification to the guest.
+
+\subsection{Block I/O and Filesystem Functional Validation}
+\label{sec:block-io}
+
+This section validates whether the virtual block device attached by vmsh can perform I/O operations correctly. All tests below are executed inside the guest. The tests are divided into two stages: the first stage uses a 64 MB blank sparse file as the backing file to validate basic read/write and data integrity; the second stage uses a 10 MB ext4 image to validate filesystem mounting.
+
+Figure~\ref{fig:block-io-test} shows the results of the first stage. The first two \texttt{dd} commands perform 4 KB read and write operations on \texttt{/dev/vdb}, the PCI virtual block device dynamically attached by vmsh, validating whether the basic I/O path is functional; the latter two commands write a specific string VMSH\_TEST\_DATA and read it back to validate data integrity. All four commands complete successfully, and the string read back matches the one written, demonstrating that vmsh's block I/O path can correctly transfer data in both read and write directions.
+\newpage
 
 \begin{figure*}[htbp]
     \centering
     \includegraphics[width=1.0\textwidth]{figures/block-io-test.png}
-    \caption{Block I/O read/write and data integrity test (QEMU)}
+    \caption{Block I/O Read/Write and Data Integrity Validation on /dev/vdb (QEMU Environment)}
     \label{fig:block-io-test}
 \end{figure*}
+
+Figure~\ref{fig:ext4-mount-test} shows the results of the second stage. Running \texttt{lsblk} inside the guest shows vdb, the virtual PCI block device dynamically attached by vmsh, with a capacity of 10 MB matching the backing file size; subsequently, it is mounted to \texttt{/tmp/mnt} via \texttt{mount}, \texttt{ls} lists the directory structure pre-stored in the image, and \texttt{umount} completes normally. This result demonstrates that vmsh's virtual block device supports not only raw I/O but also ext4 filesystem mounting and reading.
 
 \begin{figure*}[htbp]
     \centering
     \includegraphics[width=1.0\textwidth]{figures/ext4-mount-test.png}
-    \caption{ext4 filesystem mount test (QEMU)}
+    \caption{ext4 Filesystem Mount Test on /dev/vdb (QEMU Environment)}
     \label{fig:ext4-mount-test}
 \end{figure*}
 
-\subsection{Cloud Hypervisor Validation}
+\subsection{Cloud Hypervisor Validation and Generality}
+\label{sec:ch-validation}
+
+The preceding sections completed validation in a QEMU (Full IRQChip) environment. This study also executed the same procedures in a Cloud Hypervisor (Split IRQChip) environment. Figure~\ref{fig:ch-data-integrity} and Figure~\ref{fig:ch-ext4-mount} show the data integrity validation and ext4 filesystem mount test, respectively; the results are consistent with those obtained in the QEMU environment. Cloud Hypervisor is a hypervisor that the original vmsh paper was unable to support. Through the implementation of PCI transport and MSI-X interrupt injection, this study enables vmsh to operate correctly under both Full IRQChip and Split IRQChip architectures.
+
+Note: Both environments use the same NixOS microvm image; hence, the guest hostname displays as qemu-microvm in both cases.
 
 \begin{figure*}[htbp]
     \centering
-    \includegraphics[width=1.0\textwidth]{figures/ch-data-integrity.png}
-    \caption{Data integrity test (Cloud Hypervisor)}
+    \includegraphics[width=0.9\textwidth]{figures/ch-data-integrity.png}
+    \caption{Data Integrity Validation in Cloud Hypervisor Environment}
     \label{fig:ch-data-integrity}
 \end{figure*}
 
 \begin{figure*}[htbp]
     \centering
-    \includegraphics[width=1.0\textwidth]{figures/ch-ext4-mount.png}
-    \caption{ext4 filesystem mount test (Cloud Hypervisor)}
+    \includegraphics[width=0.9\textwidth]{figures/ch-ext4-mount.png}
+    \caption{ext4 Filesystem Mount Test in Cloud Hypervisor Environment}
     \label{fig:ch-ext4-mount}
 \end{figure*}
+
+The above results demonstrate that device discovery, initialization, and I/O operations can be completed using the guest's existing PCI and VirtIO driver mechanisms without any modifications to the guest. Moreover, the same PCI transport implementation operates on both QEMU and Cloud Hypervisor, validating the generality of this study's design.
+
+\section{Robustness Validation}
+\label{sec:robust-validation}
+
+This section uses the xfstests test suite to perform correctness testing on the following four configurations in this study's host environment: (1) native, executed directly on the host as the baseline; (2) qemu-blk, using QEMU's native virtio-blk device inside a QEMU guest; (3) vmsh's existing implementation (MMIO transport), using a block device attached by vmsh via MMIO transport; and (4) this study's implementation (PCI transport), using a block device attached via PCI transport. xfstests is a test suite widely adopted by the filesystem community for validating the correctness and completeness of filesystems and block devices at the system call level, covering various edge cases. The original vmsh paper also used it as the basis for correctness validation.
+
+Table~\ref{tab:robust-test-env} lists the test environment configuration for this section. The tests use the xfstests quick test group with the XFS filesystem, using two 10 GB partitions on an NVMe SSD as TEST\_DEV and SCRATCH\_DEV, respectively. The native, qemu-blk, and vmsh existing implementation (MMIO) groups run with 4 vCPUs; this study's PCI transport prototype implementation is tested with a 1 vCPU configuration. All four groups use the same NVMe SSD as the underlying storage: native accesses it directly on the host; qemu-blk mounts it to the guest via QEMU as virtio-blk; and the two vmsh groups mount the disk to the guest via MMIO and PCI transport, respectively.
+
+\begin{table*}[htbp]
+    \centering
+    \caption{Robustness Validation Environment Configuration}
+    \label{tab:robust-test-env}
+    \renewcommand\arraystretch{1.5}{
+        \begin{tabular}{| l | l |}
+        \hline
+        Item & Specification \\
+        \hline
+        Hypervisor & QEMU 8.0.2 \\
+        \hline
+        vCPU & 4 (native / qemu-blk / vmsh-mmio); 1 (vmsh-pci) \\
+        \hline
+        Memory & 8 GB \\
+        \hline
+        Guest kernel & Linux 5.12.14 \\
+        \hline
+        Guest image & NixOS (with xfstests, SSH) \\
+        \hline
+        Test disk & 500 GB NVMe SSD \\
+        \hline
+        Filesystem & XFS (two 10 GB partitions: TEST\_DEV + SCRATCH\_DEV) \\
+        \hline
+        \end{tabular}
+    }
+\end{table*}
+\newpage
+
+Table~\ref{tab:xfstests-results} shows the results of the four test groups. In the native environment, 17 out of 915 tests failed; upon entering the virtualized environment, the number of failures for qemu-blk increased to 63. Both vmsh's existing implementation (MMIO) and this study's implementation (PCI) show 62 failures, with the exact same set of failing test cases. This result indicates that this study's PCI transport prototype implementation, tested with 1 vCPU, achieves correctness consistent with vmsh's existing MMIO transport, preliminarily validating the correctness of the PCI transport mechanism itself. The limitations of this prototype implementation are further discussed in Section~\ref{sec:limitations}.
+
+\begin{table*}[htbp]
+    \centering
+    \caption{Comparison of xfstests Results Across Four Configurations}
+    \label{tab:xfstests-results}
+    \renewcommand\arraystretch{1.5}{
+        \begin{tabular}{| l | l | l | l | l |}
+        \hline
+         & native & qemu-blk & vmsh (MMIO) & Ours (PCI, 1 vCPU) \\
+        \hline
+        Total tests & 915 & 915 & 915 & 915 \\
+        \hline
+        Failed & 17 & 63 & 62 & 62 \\
+        \hline
+        \end{tabular}
+    }
+\end{table*}
+
+\section{Limitations and Discussion}
+\label{sec:limitations}
+
+This study's PCI transport is a prototype implementation that adopts a synchronous I/O model to validate the feasibility of the PCI transport mechanism. In this model, each I/O operation is completed synchronously on the ptrace-paused vCPU thread, blocking the vCPU for the entire duration of processing. This design operates correctly with 1 vCPU, and the validation results in Section~\ref{sec:func-validation} and Section~\ref{sec:robust-validation} are based on this configuration.
+
+vmsh's existing MMIO implementation adopts a different architecture: it receives guest I/O requests via ioeventfd, processes them asynchronously on a dedicated event-manager thread, and injects interrupts via irqfd upon completion, without blocking any vCPU thread throughout the process. This enables it to complete xfstests in a 4 vCPU environment, with results comparable to qemu-blk.
+
+This study's synchronous design currently cannot complete xfstests testing in a 4 vCPU environment. This synchronous model is a transitional design used to validate the correctness of the PCI transport and does not affect the conclusion regarding the feasibility of implementing a PCI transport mechanism in a non-cooperative environment. Future work can refer to vmsh's existing asynchronous model to convert the I/O path to asynchronous processing, enabling the PCI transport to achieve xfstests results comparable to vmsh's existing implementation in a 4 vCPU environment as well.
 
 \end{ZhChapter}
