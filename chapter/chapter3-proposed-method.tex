@@ -177,6 +177,13 @@ Section~\ref{sec:port-io} gave vmsh the ability to intercept the guest's PCI con
 \subsection{Initialization Process Overview}
 \label{sec:init-overview}
 
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/pci-init-stages.png}
+    \caption{Two Stages of VirtIO-PCI Device Initialization}
+    \label{fig:pci-init-stages}
+\end{figure*}
+
 From discovery by the guest to becoming ready for I/O, a VirtIO-PCI device goes through two initialization stages, each using a different access mechanism:
 
 The first stage is completed through the PCI configuration space, using the Port I/O interception mechanism described above. The guest driver reads the device's basic information (Vendor ID, Device ID, Class Code, etc.) through the configuration space, then traverses the Capabilities linked list to identify the functions supported by the device and the BAR locations corresponding to each functional region. The PCI subsystem then probes the size of each BAR through the BAR sizing mechanism and allocates MMIO addresses for them. All accesses in this stage are performed through 0xCF8/0xCFC I/O ports, triggering KVM\_EXIT\_IO, which vmsh intercepts and responds with the virtual device's configuration data.
@@ -184,13 +191,6 @@ The first stage is completed through the PCI configuration space, using the Port
 The second stage is performed through the BAR MMIO addresses allocated in the first stage. The guest driver accesses the registers of each functional region based on the BAR and offset information recorded in the Capabilities, completing the VirtIO handshake with vmsh: negotiating mutually supported features, setting up the virtqueue descriptor table and ring buffer addresses, and finally writing the DRIVER\_OK flag to mark the device as ready. Accesses in this stage trigger KVM\_EXIT\_MMIO, which is handled by vmsh's existing MMIO interception mechanism.
 
 After both stages are complete, the device enters the I/O processing phase.
-
-\begin{figure*}[htbp]
-    \centering
-    \includegraphics[width=0.9\textwidth]{figures/pci-init-stages.png}
-    \caption{Two Stages of VirtIO-PCI Device Initialization}
-    \label{fig:pci-init-stages}
-\end{figure*}
 
 \subsection{PCI Configuration Space Stage}
 \label{sec:config-space-stage}
