@@ -384,7 +384,7 @@
                          \typeout{\@chapapp\space\thechapter.}%
                          \addcontentsline{toc}{chapter}%
 %                                   {\protect\numberline{\thechapter}#1}%
-                                   {\tocprechaptername\protect\numberline{\countermapping{\zhnumber\thechapter}\tocpostchaptername}\hspace{2em}#1}%
+                                   {\tocprechaptername\protect\numberline{\countermapping{\zhnumber\thechapter}\tocpostchaptername}\hspace{1em}#1}%
                     \else
                       \addcontentsline{toc}{chapter}{#1}%
                     \fi
