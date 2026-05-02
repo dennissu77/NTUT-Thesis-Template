@@ -239,7 +239,7 @@ After the device completes VirtIO-PCI initialization, it enters the I/O processi
 \subsection{KVM\_SIGNAL\_MSI Interrupt Mechanism}
 \label{sec:kvm-signal-msi}
 
-KVM provides the KVM\_SIGNAL\_MSI interface, which allows the caller to deliver an interrupt directly to the target vCPU's LAPIC using an MSI message (address and data) as parameters. The address specifies the target LAPIC's address, and the data contains information such as the interrupt vector.
+KVM provides the KVM\_SIGNAL\_MSI interface, which allows the caller to deliver an interrupt directly to the target vCPU's LAPIC using an MSI message (address and data as parameters). The address specifies the target LAPIC's address, and the data contains information such as the interrupt vector.
 
 \begin{sloppypar}
 In vmsh's existing interrupt path, the irqfd mechanism depends on the GSI routing table and in-kernel IOAPIC established by the hypervisor during startup: the interrupt signal is routed through the GSI routing table to find the corresponding IOAPIC pin, which then forwards it to the target LAPIC. However, under the Split IRQChip architecture, this infrastructure does not exist within the KVM kernel, rendering vmsh's existing irqfd path inoperable. Although KVM provides the KVM\_SET\_GSI\_ROUTING interface for updating the routing table, and vmsh could architecturally invoke it via ptrace injection, the semantics of this interface is to replace the entire routing table rather than add a single entry, and KVM does not provide an API to read the existing routing table. vmsh cannot know the hypervisor's existing entries for merging; writing blindly would overwrite the hypervisor's routing configuration, causing interrupts for other devices to fail.
